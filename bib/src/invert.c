@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <limits.h>
 #include "streams.h"
 #include "bib.h"
 
@@ -16,7 +18,7 @@ int max_kcnt = 100;     /*  max number of keys                      */
 int max_klen = 6;       /*  max length of keys                      */
 char *ignore = "CNOPVX"; /*  string of line starts to ignore         */
 char *INDEX = INDXFILE; /*  name of output file                     */
-char *bibtmpfile = INVTEMPFILE; /*  name of temporary file                  */
+char bibtmpfile[PATH_MAX]; /*  name of temporary file                  */
 int silent = 0;         /*  0 => statistics printed                 */
 
 char *sort_it = "sort -u +0 -1 +1 -2 +2n -3 +3n %s -o %s";
@@ -41,14 +43,27 @@ main(int argcount, char **arglist)
     long int records = 0;  /*  number of records read           */
     long int keys = 0;     /*  number of keys read (occurences) */
     long int distinct;     /*  number of distinct keys          */
+    int fd;
 
     InitDirectory(BMACLIB, N_BMACLIB);
     InitDirectory(COMFILE, N_COMFILE);
 
     argc = argcount - 1;
     argv = arglist + 1;
-    mktemp(bibtmpfile);
-    output = fopen(bibtmpfile, "w");
+    
+    /* Create temporary file safely using mkstemp */
+    strcpy(bibtmpfile, INVTEMPFILE);
+    fd = mkstemp(bibtmpfile);
+    if (fd < 0) {
+        fprintf(stderr, "invert: error creating temporary file\n");
+        exit(1);
+    }
+    output = fdopen(fd, "w");
+    if (output == NULL) {
+        fprintf(stderr, "invert: error opening temporary file\n");
+        close(fd);
+        exit(1);
+    }
 
     for (flags(); argc > 0; argc--, argv++, flags()) {
         /* open input file              */
